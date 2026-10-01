@@ -1,5 +1,6 @@
 import os
 import random
+import json
 from google import genai
 import requests
 from PIL import Image, ImageDraw, ImageFont
@@ -20,9 +21,9 @@ def generate_post_content():
         "zero fluff, ending with an engagement question."
     )
     
-    # Generate content using Gemini Flash model
+    # Updated to use gemini-3.8-flash as requested by the API error
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.8-flash",
         contents=prompt,
         config=genai.types.GenerateContentConfig(
             system_instruction=system_instruction,
@@ -33,13 +34,13 @@ def generate_post_content():
 
 def create_branded_image(hook_text):
     # Create a 1200x627 LinkedIn-optimized graphic with your brand colors
-    img = Image.new("RGB", (1200, 627), color="#0f172a") # Dark Slate
+    img = Image.new("RGB", (1200, 627), color="#0f172a") # Dark Slate background
     draw = ImageDraw.Draw(img)
     
     # Draw an amber accent bar on the left edge (#f59e0b)
     draw.rectangle([0, 0, 20, 627], fill="#f59e0b")
     
-    # Paste Logo if available in the repository
+    # Paste Logo if available in the repository root directory
     if os.path.exists("logo.png"):
         logo = Image.open("logo.png").convert("RGBA")
         logo.thumbnail((120, 120))
@@ -50,7 +51,8 @@ def create_branded_image(hook_text):
     except:
         font_large = ImageFont.load_default()
 
-    draw.text((80, 240), "MODULEASE EaaS", fill="#3b82f6", font=font_large) # Electric Blue
+    # Brand title watermark text in Electric Blue (#3b82f6)
+    draw.text((80, 240), "MODULEASE EaaS", fill="#3b82f6", font=font_large)
     
     image_path = "post_graphic.png"
     img.save(image_path)
@@ -58,12 +60,44 @@ def create_branded_image(hook_text):
 
 def post_to_linkedin(text, image_path):
     access_token = os.environ.get("LINKEDIN_ACCESS_TOKEN")
-    author_urn = os.environ.get("LINKEDIN_AUTHOR_URN")
+    author_urn = os.environ.get("LINKEDIN_AUTHOR_URN") # urn:li:organization:145241250
     
-    print("Agent execution: Post successfully generated via Gemini!")
-    print(f"Caption:\n{text}")
+    url = "https://api.linkedin.com/rest/posts"
+    
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+        "LinkedIn-Version": "202601"
+    }
+    
+    payload = {
+        "author": author_urn,
+        "commentary": text,
+        "visibility": "PUBLIC",
+        "distribution": {
+            "feedDistribution": "MAIN_FEED",
+            "searchable": True,
+            "targetEntities": [],
+            "thirdPartyDistributionChannels": []
+        },
+        "lifecycleState": "PUBLISHED",
+        "isReshareDisabledByCreator": False
+    }
+    
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    
+    if response.status_code in [200, 201]:
+        print("Success! Post published live to LinkedIn company page.")
+    else:
+        print(f"Failed to post. Status: {response.status_code}, Response: {response.text}")
 
 if __name__ == "__main__":
+    print("Generating post content via Gemini...")
     caption = generate_post_content()
+    
+    print("Creating branded graphic image...")
     graphic = create_branded_image(caption.split('\n')[0])
+    
+    print("Dispatching live post to LinkedIn...")
     post_to_linkedin(caption, graphic)
