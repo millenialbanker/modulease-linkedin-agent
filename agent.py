@@ -1,7 +1,9 @@
 import os
 import random
 import json
+import time
 from google import genai
+from google.genai.errors import ServerError
 import requests
 from PIL import Image, ImageDraw, ImageFont
 
@@ -21,16 +23,25 @@ def generate_post_content():
         "zero fluff, ending with an engagement question."
     )
     
-    # Updated to use gemini-3.8-flash as requested by the API error
-    response = client.models.generate_content(
-        model="gemini-3.5-flash-lite",
-        contents=prompt,
-        config=genai.types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            temperature=0.7,
-        ),
-    )
-    return response.text
+    # Retry loop to handle temporary 503 high demand spikes automatically
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.5-flash-lite",
+                contents=prompt,
+                config=genai.types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.7,
+                ),
+            )
+            return response.text
+        except ServerError as e:
+            if attempt < max_retries - 1:
+                print(f"API busy (503). Retrying in {(attempt + 1) * 5} seconds... (Attempt {attempt + 1}/{max_retries})")
+                time.sleep((attempt + 1) * 5)
+            else:
+                raise e
 
 def create_branded_image(hook_text):
     # Create a 1200x627 LinkedIn-optimized graphic with your brand colors
@@ -71,18 +82,17 @@ def post_to_linkedin(text, image_path):
         "LinkedIn-Version": "202601"
     }
     
+    # Cleaned payload with unsupported fields removed
     payload = {
         "author": author_urn,
         "commentary": text,
         "visibility": "PUBLIC",
         "distribution": {
             "feedDistribution": "MAIN_FEED",
-            "searchable": True,
             "targetEntities": [],
             "thirdPartyDistributionChannels": []
         },
-        "lifecycleState": "PUBLISHED",
-        "isReshareDisabledByCreator": False
+        "lifecycleState": "PUBLISHED"
     }
     
     response = requests.post(url, headers=headers, data=json.dumps(payload))
