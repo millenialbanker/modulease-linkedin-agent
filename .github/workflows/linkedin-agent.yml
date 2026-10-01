@@ -2,9 +2,9 @@ name: Modulease LinkedIn EaaS Agent
 
 on:
   schedule:
-    # Runs twice a day via UTC cron (Adjust hours as needed for your timezone)
+    # Runs twice a day via UTC cron
     - cron: '30 3,8 * * *'
-  workflow_dispatch: # Allows you to click 'Run workflow' manually anytime
+  workflow_dispatch: # Allows manual trigger from GitHub
 
 jobs:
   run-agent:
@@ -20,11 +20,11 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install openai requests Pillow
+          pip install google-genai requests Pillow
 
       - name: Run Marketing Agent
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
           LINKEDIN_AUTHOR_URN: ${{ secrets.LINKEDIN_AUTHOR_URN }}
         run: |
